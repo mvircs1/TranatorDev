@@ -1,11 +1,30 @@
-# TT Yandex Bridge v0.1.1 (experimental) — TauriTavern / SillyTavern
+# TT Yandex Bridge v0.1.2 (experimental) — TauriTavern / SillyTavern
 
 Uma extensão **somente de frontend** que tenta contornar a mensagem
 `Unsupported translate provider: yandex` vista em versões do TauriTavern.
 
+## Novidade da v0.1.2 — modo clássico (qualidade narrativa)
+
+Verificamos no `src/endpoints/translate.js` oficial do SillyTavern que os
+blocos do mesmo texto são enviados juntos em **uma única requisição** como
+campos repetidos `text`. Nas versões anteriores do TT Yandex Bridge, cada
+bloco disparava uma requisição isolada. Isso pode reduzir a continuidade em
+histórias extensas, embora não haja garantia de melhora em todos os casos.
+
+- **Modo clássico do SillyTavern (enviar trechos juntos)** vem **ativado**.
+- Desative temporariamente para comparar com o comportamento da v0.1.1.
+- Quando ativado, o modo também reproduz a combinação `json.text.join()` do
+  servidor original (que usa vírgulas como separador, inclusive entre blocos).
+- Ainda há diferenças: o original faz a chamada pelo servidor Node.js e a
+  extensão faz a chamada pelo navegador Android/WebView. Não é possível
+  garantir que o Yandex retorne sempre o mesmo texto.
+- Se o Google fallback estiver ativo, confira no status qual provedor foi
+  realmente utilizado antes de comparar a qualidade.
+- Traduções já gravadas no chat não mudam sozinhas; traduza a mensagem de novo.
+
 ## Correção da versão 0.1.1 — português brasileiro
 
-Na v0.1.0, a função `normalizeLang()` convertia **`pt-BR` em `pt`** e, assim, perdia a preferência pelo português brasileiro. A v0.1.1 envia **`pt-BR`** quando você seleciona Português (Brasil) ou português genérico, com a opção **Forçar português brasileiro (pt-BR)** ativada por padrão.
+Na v0.1.0, a função `normalizeLang()` convertia **`pt-BR` em `pt`** e, assim, perdia a preferência pelo português brasileiro. Desde a v0.1.1, o plugin envia **`pt-BR`** quando você seleciona Português (Brasil) ou português genérico, com a opção **Forçar português brasileiro (pt-BR)** ativada por padrão.
 
 - Para traduzir as respostas para português brasileiro, mantenha essa opção ativada.
 - Traduções de entrada para inglês (`en`) não são alteradas.
@@ -83,8 +102,7 @@ criados logs remotos nem coletadas chaves. A configuração de fallback fica no
 
 - Desenvolvido a partir das rotas e do formato de requisição documentado no
   código oficial SillyTavern (branch `release`, consultada em novembro de 2026).
-- **Teste automatizado local** cobre interceptação, roteamento, códigos de idioma pt-BR/pt/en, Yandex direto
-  simulado, erro e fallback Google simulado.
+- **Teste automatizado local** cobre interceptação, roteamento, códigos de idioma pt-BR/pt/en, modo clássico com múltiplos trechos, modo por trecho, Yandex direto simulado, erro e fallback Google simulado.
 - **Não testado em um dispositivo Android/TauriTavern real**.
 
 Referências de API:

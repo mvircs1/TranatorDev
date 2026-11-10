@@ -1,5 +1,5 @@
 /*
- * TT Yandex Bridge v0.1.1
+ * TT Yandex Bridge v0.1.2
  * Interface-only extension. No Rust / Node.js server plugins.
  *
  * Intercepts ONLY POST /api/translate/yandex requests made by SillyTavern's
@@ -12,7 +12,7 @@
  */
 
 const KEY = 'tt-yandex-bridge-settings-v1';
-const DEFAULTS = Object.freeze({ enabled: true, fallbackGoogle: false, notifyFallback: true, brazilianPortuguese: true });
+const DEFAULTS = Object.freeze({ enabled: true, fallbackGoogle: false, notifyFallback: true, brazilianPortuguese: true, classicBatch: true });
 const YANDEX_URL = 'https://translate.yandex.net/api/v1/tr.json/translate';
 const EXTENSION_TAG = '[TT Yandex Bridge]';
 
@@ -24,6 +24,7 @@ function loadSettings() {
             fallbackGoogle: raw.fallbackGoogle === true,
             notifyFallback: raw.notifyFallback !== false,
             brazilianPortuguese: raw.brazilianPortuguese !== false,
+            classicBatch: raw.classicBatch !== false,
         };
     } catch {
         return { ...DEFAULTS };
@@ -109,38 +110,52 @@ async function decodeBody(input, init) {
 
 // Deliberately uses the captured fetch, avoiding infinite recursion through
 // the interceptor. This does not bypass CORS / WebView restrictions.
-async function directYandex(chunks, lang) {
-    const results = [];
-    for (const chunk of chunks) {
-        if (!chunk) { results.push(''); continue; }
-        const url = `${YANDEX_URL}?ucid=${makeId()}&srv=android&format=text`;
-        const form = new URLSearchParams({ text: chunk, lang });
-        let response;
-        try {
-            response = await originalFetch(url, {
-                method: 'POST',
-                body: form,
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                credentials: 'omit',
-                referrerPolicy: 'no-referrer',
-                cache: 'no-store',
-                mode: 'cors',
-            });
-        } catch (error) {
-            throw new Error(`Acesso direto ao Yandex bloqueado ou indisponível (possível CORS/rede): ${error?.message || error}`);
-        }
-        if (!response.ok) {
-            throw new Error(`Yandex respondeu HTTP ${response.status} ${response.statusText || ''}`.trim());
-        }
-        let json;
-        try { json = await response.json(); }
-        catch { throw new Error('Yandex retornou uma resposta que não é JSON válido.'); }
-        if (!Array.isArray(json?.text)) {
-            throw new Error('Resposta do Yandex sem o campo text esperado.');
-        }
-        results.push(json.text.join(''));
+// The original SillyTavern sends ALL 5000-character chunks as repeated
+// `text` form fields in ONE POST. Sending each chunk in a separate request
+// (as v0.1.1 did) can change available translation context.
+// Legacy mode is the default. The previous per-chunk mode remains an A/B option.
+async function fetchYandexOnce(chunks, lang) {
+    const url = `${YANDEX_URL}?ucid=${makeId()}&srv=android&format=text`;
+    const form = new URLSearchParams();
+    for (const chunk of chunks) form.append('text', chunk);
+    form.append('lang', lang);
+    let response;
+    try {
+        response = await originalFetch(url, {
+            method: 'POST',
+            body: form,
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            credentials: 'omit',
+            referrerPolicy: 'no-referrer',
+            cache: 'no-store',
+            mode: 'cors',
+        });
+    } catch (error) {
+        throw new Error(`Acesso direto ao Yandex bloqueado ou indisponível (possível CORS/rede): ${error?.message || error}`);
     }
-    return results.join('');
+    if (!response.ok) throw new Error(`Yandex respondeu HTTP ${response.status} ${response.statusText || ''}`.trim());
+    let json;
+    try { json = await response.json(); }
+    catch { throw new Error('Yandex retornou uma resposta que não é JSON válido.'); }
+    if (!Array.isArray(json?.text)) throw new Error('Resposta do Yandex sem o campo text esperado.');
+    return json.text;
+}
+
+async function directYandex(chunks, lang) {
+    if (!chunks.some(Boolean)) return '';
+    if (settings.classicBatch) {
+        // Matches upstream src/endpoints/translate.js: json.text.join()
+        // (comma is intentional; the upstream route uses the same join).
+        const outputs = await fetchYandexOnce(chunks, lang);
+        return outputs.join();
+    }
+    const outputs = [];
+    for (const chunk of chunks) {
+        if (!chunk) { outputs.push(''); continue; }
+        const translations = await fetchYandexOnce([chunk], lang);
+        outputs.push(translations.join(''));
+    }
+    return outputs.join('');
 }
 
 async function googleFallback(chunks, lang, init) {
@@ -167,7 +182,7 @@ async function translateYandex(input, init) {
         const { chunks, lang } = await decodeBody(input, init);
         status('Consultando o Yandex diretamente…');
         const translated = await directYandex(chunks, lang);
-        status(`Última tradução: Yandex direto (idioma: ${lang}, sem fallback).`);
+        status(`Última tradução: Yandex direto (${settings.classicBatch ? 'modo clássico, trechos juntos' : 'modo anterior, trechos separados'}; idioma: ${lang}; sem fallback).`);
         return new Response(translated, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
     } catch (error) {
         const reason = String(error?.message || error);
@@ -239,12 +254,13 @@ function installPanel() {
 
     panel.append(control('Ativar correção do Yandex', 'ttyb_enabled', settings.enabled));
     panel.append(control('Forçar português brasileiro (pt-BR)', 'ttyb_ptbr', settings.brazilianPortuguese));
+    panel.append(control('Modo clássico do SillyTavern (enviar trechos juntos)', 'ttyb_classic', settings.classicBatch));
     panel.append(control('Usar Google se o Yandex falhar', 'ttyb_fallback', settings.fallbackGoogle));
     panel.append(control('Avisar quando usar Google', 'ttyb_notify', settings.notifyFallback));
 
     const note = document.createElement('p');
     note.className = 'ttyb-note';
-    note.textContent = 'Selecione Yandex no Chat Translation original. A opção pt-BR evita a conversão anterior para pt genérico; não garante que a API não oficial respeite a variante. O fallback Google é opcional.';
+    note.textContent = 'Modo clássico reproduz o agrupamento de trechos e o formato de saída do SillyTavern. Desative apenas para comparar com a versão 0.1.1. pt-BR pode não ser respeitado pelo endpoint não oficial. O fallback Google é opcional.';
     panel.append(note);
 
     const action = document.createElement('button');
@@ -260,7 +276,7 @@ function installPanel() {
     panel.append(state);
     parent.append(panel);
 
-    for (const [element, key] of [['ttyb_enabled', 'enabled'], ['ttyb_ptbr', 'brazilianPortuguese'], ['ttyb_fallback', 'fallbackGoogle'], ['ttyb_notify', 'notifyFallback']]) {
+    for (const [element, key] of [['ttyb_enabled', 'enabled'], ['ttyb_ptbr', 'brazilianPortuguese'], ['ttyb_classic', 'classicBatch'], ['ttyb_fallback', 'fallbackGoogle'], ['ttyb_notify', 'notifyFallback']]) {
         document.getElementById(element).addEventListener('change', (event) => {
             settings[key] = Boolean(event.target.checked);
             saveSettings();
