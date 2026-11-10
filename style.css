@@ -1,0 +1,9 @@
+#ttyb_panel { padding: 12px; margin: 10px 0; border: 1px solid var(--SmartThemeBorderColor, #666); border-radius: 8px; }
+#ttyb_panel h3 { font-weight: 700; margin: 0 0 8px 0; }
+#ttyb_panel .ttyb-switch { display: flex; align-items: center; gap: 9px; margin: 10px 0; cursor: pointer; line-height: 1.3; }
+#ttyb_panel .ttyb-switch input { accent-color: var(--SmartThemeQuoteColor, #5288cf); width: 18px; height: 18px; flex: 0 0 auto; }
+#ttyb_panel .ttyb-note { margin: 10px 0; font-size: 0.86rem; opacity: 0.8; }
+#ttyb_panel #ttyb_test { width: 100%; margin: 8px 0; min-height: 40px; }
+#ttyb_panel .ttyb-status { overflow-wrap: anywhere; padding: 8px; border-radius: 5px; background: rgba(127,127,127,0.10); font-size: 0.85rem; }
+#ttyb_panel .ttyb-status[data-level='error'] { border-left: 3px solid #d94c4c; }
+#ttyb_panel .ttyb-status[data-level='warn'] { border-left: 3px solid #e6a13d; }
