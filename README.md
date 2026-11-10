@@ -1,7 +1,18 @@
-# TT Yandex Bridge (experimental) — TauriTavern / SillyTavern
+# TT Yandex Bridge v0.1.1 (experimental) — TauriTavern / SillyTavern
 
 Uma extensão **somente de frontend** que tenta contornar a mensagem
 `Unsupported translate provider: yandex` vista em versões do TauriTavern.
+
+## Correção da versão 0.1.1 — português brasileiro
+
+Na v0.1.0, a função `normalizeLang()` convertia **`pt-BR` em `pt`** e, assim, perdia a preferência pelo português brasileiro. A v0.1.1 envia **`pt-BR`** quando você seleciona Português (Brasil) ou português genérico, com a opção **Forçar português brasileiro (pt-BR)** ativada por padrão.
+
+- Para traduzir as respostas para português brasileiro, mantenha essa opção ativada.
+- Traduções de entrada para inglês (`en`) não são alteradas.
+- O painel mostra qual código de idioma foi enviado ao Yandex.
+- Desativar a opção volta a solicitar `pt` genérico, útil caso o endpoint não oficial rejeite `pt-BR`.
+
+**Importante:** Yandex Cloud documenta `pt-BR`, mas o endpoint *não oficial* usado por esta extensão não possui contrato público confirmando o comportamento regional. Portanto, essa correção garante o **pedido explícito de pt-BR**, mas não pode garantir que o texto devolvido sempre use vocabulário brasileiro. Se a API rejeitar `pt-BR`, a extensão exibirá o erro (ou usará Google somente se o fallback estiver ativado).
 
 ## O que faz
 
@@ -41,6 +52,8 @@ repositório e cole sua URL em **Extensions > Install Extension**. Exemplo
 `https://github.com/SEU-USUARIO/TT-Yandex-Bridge` (este é só um exemplo,
 **não é um link existente**). Aguarde a instalação e recarregue.
 
+Se você já publicou a versão 0.1.0 no GitHub, **substitua os arquivos** no mesmo repositório (não crie uma segunda extensão), depois use **Update Extension** ou reinstale/atualize no TauriTavern e recarregue.
+
 O ZIP desta entrega é **código-fonte pronto para publicar**, não um APK e não
 pode ser colado diretamente no campo **Install Extension**.
 
@@ -50,7 +63,8 @@ pode ser colado diretamente no campo **Install Extension**.
 2. Escolha **Portuguese** ou **Portuguese (Brazil)** como idioma de destino.
 3. Em **Auto-mode**, escolha *Translate responses* ou *Translate both*.
 4. Em **Extensions > TT Yandex Bridge**, mantenha a extensão ativada.
-5. Pressione **Testar tradução**. Veja o status:
+5. Mantenha **Forçar português brasileiro (pt-BR)** ativado.
+6. Pressione **Testar tradução**. Veja o status:
     - `Yandex direto`: a API Yandex foi utilizada;
     - `Google (fallback)`: o Yandex falhou, mas Google foi utilizado, **somente** se você ativou a opção;
     - erro `CORS/rede`: Android bloqueou a chamada ou o serviço recusou.
@@ -69,7 +83,7 @@ criados logs remotos nem coletadas chaves. A configuração de fallback fica no
 
 - Desenvolvido a partir das rotas e do formato de requisição documentado no
   código oficial SillyTavern (branch `release`, consultada em novembro de 2026).
-- **Teste automatizado local** cobre interceptação, roteamento, Yandex direto
+- **Teste automatizado local** cobre interceptação, roteamento, códigos de idioma pt-BR/pt/en, Yandex direto
   simulado, erro e fallback Google simulado.
 - **Não testado em um dispositivo Android/TauriTavern real**.
 
@@ -78,3 +92,5 @@ Referências de API:
 - https://github.com/SillyTavern/SillyTavern/blob/release/src/endpoints/translate.js
 - https://docs.sillytavern.app/for-contributors/writing-extensions/
 - https://github.com/Darkatse/TauriTavern/blob/main/ExtensionDEV.md
+
+- https://aistudio.yandex.ru/en/docs/translate/concepts/supported-languages

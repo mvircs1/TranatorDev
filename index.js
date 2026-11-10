@@ -1,5 +1,5 @@
 /*
- * TT Yandex Bridge v0.1.0
+ * TT Yandex Bridge v0.1.1
  * Interface-only extension. No Rust / Node.js server plugins.
  *
  * Intercepts ONLY POST /api/translate/yandex requests made by SillyTavern's
@@ -12,7 +12,7 @@
  */
 
 const KEY = 'tt-yandex-bridge-settings-v1';
-const DEFAULTS = Object.freeze({ enabled: true, fallbackGoogle: false, notifyFallback: true });
+const DEFAULTS = Object.freeze({ enabled: true, fallbackGoogle: false, notifyFallback: true, brazilianPortuguese: true });
 const YANDEX_URL = 'https://translate.yandex.net/api/v1/tr.json/translate';
 const EXTENSION_TAG = '[TT Yandex Bridge]';
 
@@ -23,6 +23,7 @@ function loadSettings() {
             enabled: raw.enabled !== false,
             fallbackGoogle: raw.fallbackGoogle === true,
             notifyFallback: raw.notifyFallback !== false,
+            brazilianPortuguese: raw.brazilianPortuguese !== false,
         };
     } catch {
         return { ...DEFAULTS };
@@ -61,8 +62,15 @@ function alertUser(message, type = 'warning') {
 function normalizeLang(lang) {
     const code = String(lang || '').trim();
     if (!code) throw new Error('Idioma de destino não informado.');
-    if (code.toLowerCase() === 'pt-br' || code.toLowerCase() === 'pt-pt') return 'pt';
-    if (code.toLowerCase() === 'zh-cn' || code.toLowerCase() === 'zh-tw') return 'zh';
+    const lower = code.toLowerCase();
+    // The original extension mapped pt-BR -> pt, losing the Brazilian locale.
+    // Preserve/force Brazilian Portuguese for output while leaving e.g. en alone.
+    if (lower === 'pt' || lower === 'pt-br' || lower === 'pt_br') {
+        return settings.brazilianPortuguese ? 'pt-BR' : 'pt';
+    }
+    // Yandex generic Portuguese may be used when European Portuguese was chosen.
+    if (lower === 'pt-pt' || lower === 'pt_pt') return 'pt';
+    if (lower === 'zh-cn' || lower === 'zh-tw') return 'zh';
     return code;
 }
 
@@ -159,7 +167,7 @@ async function translateYandex(input, init) {
         const { chunks, lang } = await decodeBody(input, init);
         status('Consultando o Yandex diretamente…');
         const translated = await directYandex(chunks, lang);
-        status('Última tradução: Yandex direto (sem fallback).');
+        status(`Última tradução: Yandex direto (idioma: ${lang}, sem fallback).`);
         return new Response(translated, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
     } catch (error) {
         const reason = String(error?.message || error);
@@ -167,7 +175,7 @@ async function translateYandex(input, init) {
             try {
                 const { chunks, lang } = await decodeBody(input, init);
                 const translated = await googleFallback(chunks, lang, init);
-                status(`Última tradução: Google (fallback). Yandex falhou: ${reason}`, 'warn');
+                status(`Última tradução: Google (fallback, idioma: ${lang}). Yandex falhou: ${reason}`, 'warn');
                 if (settings.notifyFallback) alertUser('Yandex indisponível: esta tradução usou Google, conforme sua configuração.', 'info');
                 return new Response(translated, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
             } catch (googleError) {
@@ -230,19 +238,20 @@ function installPanel() {
     panel.append(heading);
 
     panel.append(control('Ativar correção do Yandex', 'ttyb_enabled', settings.enabled));
+    panel.append(control('Forçar português brasileiro (pt-BR)', 'ttyb_ptbr', settings.brazilianPortuguese));
     panel.append(control('Usar Google se o Yandex falhar', 'ttyb_fallback', settings.fallbackGoogle));
     panel.append(control('Avisar quando usar Google', 'ttyb_notify', settings.notifyFallback));
 
     const note = document.createElement('p');
     note.className = 'ttyb-note';
-    note.textContent = 'Selecione Yandex no Chat Translation original. A extensão não altera seus chats; usa o serviço direto do Yandex quando o Android permite. O fallback é opcional.';
+    note.textContent = 'Selecione Yandex no Chat Translation original. A opção pt-BR evita a conversão anterior para pt genérico; não garante que a API não oficial respeite a variante. O fallback Google é opcional.';
     panel.append(note);
 
     const action = document.createElement('button');
     action.type = 'button';
     action.id = 'ttyb_test';
     action.className = 'menu_button';
-    action.textContent = 'Testar tradução (Hello → português)';
+    action.textContent = 'Testar tradução (Hello → pt-BR)';
     panel.append(action);
     const state = document.createElement('p');
     state.id = 'ttyb_status';
@@ -251,7 +260,7 @@ function installPanel() {
     panel.append(state);
     parent.append(panel);
 
-    for (const [element, key] of [['ttyb_enabled', 'enabled'], ['ttyb_fallback', 'fallbackGoogle'], ['ttyb_notify', 'notifyFallback']]) {
+    for (const [element, key] of [['ttyb_enabled', 'enabled'], ['ttyb_ptbr', 'brazilianPortuguese'], ['ttyb_fallback', 'fallbackGoogle'], ['ttyb_notify', 'notifyFallback']]) {
         document.getElementById(element).addEventListener('change', (event) => {
             settings[key] = Boolean(event.target.checked);
             saveSettings();
